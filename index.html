@@ -1,8 +1,417 @@
-<!doctype html><html lang=""><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>shanghai-library</title></head><style>body {
-      margin: 0;
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>车库点位图片预览</title>
+  <!-- 引入 Vue 3，方便用配置驱动绿色点与预览弹层。 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <!-- 引入 Element Plus，提升页面观感与图片预览体验。 -->
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <script src="https://unpkg.com/element-plus/dist/index.full.min.js"></script>
+  <style>
+    /* 页面基础背景与字体。 */
+    :root {
+      color-scheme: light;
+      --page-bg: linear-gradient(180deg, #eef4ff 0%, #f7f9fc 100%);
+      --card-bg: rgba(255, 255, 255, 0.88);
+      --card-border: rgba(15, 23, 42, 0.08);
+      --text-main: #1f2937;
+      --text-secondary: #64748b;
+      --shadow-main: 0 18px 45px rgba(15, 23, 42, 0.12);
+      --brand-green: #22c55e;
+      --brand-green-dark: #16a34a;
+      --brand-green-soft: rgba(34, 197, 94, 0.18);
+      --panel-bg: rgba(248, 250, 252, 0.92);
     }
-		#app{
-			width: 100%;
-			height: 100%;
+
+    /* 让页面在大屏与小屏下都能保持比较舒服的留白。 */
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--page-bg);
+      color: var(--text-main);
+    }
+
+    /* 页面主容器。 */
+    .page-shell {
+      width: min(1440px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+
+    /* 主图卡片。 */
+    .map-card {
+      border-radius: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--shadow-main);
+      backdrop-filter: blur(14px);
+      overflow: hidden;
+    }
+
+    /* 主图标题区。 */
+    .map-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 24px 0;
+      flex-wrap: wrap;
+    }
+
+    .map-title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    /* 图片与热点的定位容器。 */
+    .map-stage {
       position: relative;
-		}</style><body><noscript><strong>We're sorry but shanghai-library doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app">2222</div></body></html>
+      width: 100%;
+      padding: 0 24px 24px;
+    }
+
+    /* 让底图拥有更好的圆角与阴影。 */
+    .map-image-wrapper {
+      position: relative;
+      width: 100%;
+      border-radius: 22px;
+      overflow: hidden;
+      background: #ffffff;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
+    }
+
+    .map-image {
+      display: block;
+      width: 100%;
+      height: auto;
+      user-select: none;
+    }
+
+    /* 绿色点位按钮。 */
+    .point-button {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #86efac 0%, var(--brand-green) 65%, var(--brand-green-dark) 100%);
+      box-shadow: 0 0 0 6px var(--brand-green-soft), 0 10px 18px rgba(22, 163, 74, 0.28);
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      z-index: 2;
+    }
+
+    /* 点位外圈脉冲动画，用来强调“可点击”。 */
+    .point-button::after {
+      content: "";
+      position: absolute;
+      inset: -7px;
+      border-radius: 50%;
+      border: 2px solid rgba(34, 197, 94, 0.45);
+      animation: pulse 2.4s infinite;
+    }
+
+    .point-button:hover,
+    .point-button:focus-visible {
+      transform: translate(-50%, -50%) scale(1.12);
+      box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.24), 0 14px 24px rgba(22, 163, 74, 0.36);
+      outline: none;
+    }
+
+    /* 当前激活点位用更明显的视觉样式。 */
+    .point-button.is-active {
+      background: radial-gradient(circle at 35% 35%, #bbf7d0 0%, #10b981 65%, #059669 100%);
+      box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.24), 0 16px 28px rgba(5, 150, 105, 0.38);
+    }
+
+    /* 点位的小编号标签。 */
+    .point-label {
+      position: absolute;
+      top: 26px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+      background: rgba(15, 23, 42, 0.68);
+      box-shadow: 0 6px 12px rgba(15, 23, 42, 0.16);
+    }
+
+    /* 页面在窄屏下改成纵向布局。 */
+    @media (max-width: 960px) {
+      .page-shell {
+        width: min(100vw - 20px, 1440px);
+        padding-top: 16px;
+      }
+
+      .map-stage,
+      .map-header {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+    }
+
+    /* 绿色点的脉冲关键帧。 */
+    @keyframes pulse {
+      0% {
+        transform: scale(0.9);
+        opacity: 0.9;
+      }
+      70% {
+        transform: scale(1.25);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1.25);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- 页面主体容器。 -->
+    <div class="page-shell">
+      <!-- 主图与点位区域。 -->
+      <div class="map-card">
+        <!-- <div class="map-header">
+          <div>
+            <h2 class="map-title">总图点位</h2>
+          </div>
+          <el-space wrap>
+            <el-tag type="success" effect="dark">绿色点可点击</el-tag>
+          </el-space>
+        </div> -->
+
+        <div class="map-stage">
+          <div class="map-image-wrapper">
+            <!-- 底图。 -->
+            <img class="map-image" :src="mapImagePath" alt="车库路线总图">
+
+            <!-- 绿色点位，根据百分比坐标覆盖到图片上。 -->
+            <button
+              v-for="point in points"
+              :key="point.id"
+              class="point-button"
+              :class="{ 'is-active': activePoint && activePoint.id === point.id }"
+              :style="{ left: `${point.left}%`, top: `${point.top}%` }"
+              :title="`${point.name} / 文件夹 ${point.folder}`"
+              type="button"
+              @click="openPoint(point)"
+            >
+              <span class="point-label">{{ point.shortName }}</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 点击点位后，直接打开图片查看器，不再渲染页面下方预览区。 -->
+    <el-image-viewer
+      v-if="viewerVisible && currentImages.length"
+      :url-list="currentImages"
+      :initial-index="viewerInitialIndex"
+      :infinite="false"
+      @close="closeViewer"
+    />
+  </div>
+
+  <script>
+    // 从全局对象中取出 Vue 能力。这里使用运行时模板方案，便于单文件快速交付。
+    const { createApp } = Vue;
+
+    // 定义页面应用。
+    const app = createApp({
+      data() {
+        return {
+          // 底图路径。
+          mapImagePath: "./WechatIMG259.jpg",
+
+          // 当前选中的点位。
+          activePoint: null,
+
+          // 控制图片查看器是否显示。
+          viewerVisible: false,
+
+          // 记录查看器默认打开哪一张图。
+          viewerInitialIndex: 0,
+
+          // 这里维护已经存在的文件夹名称，用来区分“空文件夹”和“未创建文件夹”。
+          existingFolderNames: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"],
+
+          // 这里维护每个文件夹中可预览的图片路径。
+          // 纯 HTML 无法自动枚举本地文件夹内容，所以需要在这里显式登记图片。
+          folderImages: {
+            "1": ["./1/1.jpg"],
+            "2": ["./2/1.jpg"],
+            "3": ["./3/1.jpg"],
+            "4": ["./4/1.jpg"],
+            "5": ["./5/1.jpg"],
+            "6": ["./6/1.jpg"],
+            "7": ["./7/1.jpg"],
+            "8": ["./8/1.jpg"],
+            "9": ["./9/1.jpg"],
+            "10": ["./10/1.jpg"],
+            "11": ["./11/1.jpg"],
+            "12": ["./12/1.jpg"],
+            "13": ["./13/1.jpg"]
+          },
+
+          // 这里维护所有绿色点位的坐标和文件夹映射。
+          // 坐标来自对原图可见绿色点的自动识别，并转换成百分比，缩放后也能对齐。
+          points: [
+            { id: "1", shortName: "01", name: "点位 01", folder: "1", left: 21.45, top: 21.34 },
+            { id: "2", shortName: "02", name: "点位 02", folder: "2", left: 39.54, top: 21.34 },
+            { id: "3", shortName: "03", name: "点位 03", folder: "3", left: 55.70, top: 21.34 },
+            { id: "4", shortName: "04", name: "点位 04", folder: "4", left: 80.02, top: 21.54 },
+            { id: "5", shortName: "05", name: "点位 05", folder: "5", left: 85.13, top: 21.54 },
+            { id: "6", shortName: "06", name: "点位 06", folder: "6", left: 21.45, top: 35.56 },
+            { id: "7", shortName: "07", name: "点位 07", folder: "7", left: 80.43, top: 35.99 },
+            { id: "8", shortName: "08", name: "点位 08", folder: "8", left: 86.25, top: 36.36 },
+            { id: "9", shortName: "09", name: "点位 09", folder: "9", left: 73.59, top: 48.39 },
+            { id: "10", shortName: "10", name: "点位 10", folder: "10", left: 39.13, top: 54.95 },
+            { id: "11", shortName: "11", name: "点位 11", folder: "11", left: 56.84, top: 54.95 },
+            { id: "12", shortName: "12", name: "点位 12", folder: "12", left: 74.42, top: 63.67 },
+            { id: "13", shortName: "13", name: "点位 13", folder: "13", left: 80.43, top: 63.67 }
+          ]
+        };
+      },
+
+      computed: {
+        // 统一从当前点位映射到图片数组，避免模板里直接写复杂逻辑。
+        currentImages() {
+          if (!this.activePoint) {
+            return [];
+          }
+          return this.folderImages[this.activePoint.folder] || [];
+        }
+      },
+
+      mounted() {
+        // 支持通过 URL 参数直达某个点位，便于分享链接和自动验收。
+        const searchParams = new URLSearchParams(window.location.search);
+        const targetPointId = searchParams.get("point");
+
+        if (!targetPointId) {
+          return;
+        }
+
+        const matchedPoint = this.points.find((point) => point.id === targetPointId);
+
+        if (matchedPoint) {
+          this.openPoint(matchedPoint);
+        }
+      },
+
+      methods: {
+        // 点击点位后，直接打开当前点位对应文件夹的图片查看器。
+        openPoint(point) {
+          this.activePoint = point;
+          this.viewerInitialIndex = 0;
+
+          const pointStatus = this.getPointStatus(point);
+
+          // 有图片时直接拉起查看器，不再让用户额外点击页面中的预览图。
+          if (pointStatus === "ready") {
+            this.viewerVisible = true;
+            return;
+          }
+
+          this.viewerVisible = false;
+
+          // 文件夹为空或未创建时，直接给出提示信息。
+          ElementPlus.ElMessage({
+            message: this.getEmptyDescription(point),
+            type: pointStatus === "empty" ? "warning" : "error",
+            duration: 2200
+          });
+        },
+
+        // 关闭查看器时同步关闭状态，避免残留打开态。
+        closeViewer() {
+          this.viewerVisible = false;
+        },
+
+        // 计算点位对应的状态。
+        getPointStatus(point) {
+          const folderName = point.folder;
+          const folderExists = this.existingFolderNames.includes(folderName);
+          const imageList = this.folderImages[folderName] || [];
+
+          if (!folderExists) {
+            return "missing";
+          }
+
+          if (!imageList.length) {
+            return "empty";
+          }
+
+          return "ready";
+        },
+
+        // 给不同状态映射 Element Plus 标签类型。
+        getStatusTagType(point) {
+          const status = this.getPointStatus(point);
+
+          if (status === "ready") {
+            return "success";
+          }
+
+          if (status === "empty") {
+            return "warning";
+          }
+
+          return "danger";
+        },
+
+        // 把状态转成更友好的中文文案。
+        getStatusText(point) {
+          const status = this.getPointStatus(point);
+
+          if (status === "ready") {
+            return "已有图片";
+          }
+
+          if (status === "empty") {
+            return "文件夹为空";
+          }
+
+          return "文件夹未创建";
+        },
+
+        // 根据状态生成空状态提示。
+        getEmptyDescription(point) {
+          const status = this.getPointStatus(point);
+
+          if (status === "empty") {
+            return `文件夹 ${point.folder} 已存在，但当前还没有可预览的图片。`;
+          }
+
+          return `文件夹 ${point.folder} 还没有创建，请先创建文件夹并配置图片路径。`;
+        }
+      }
+    });
+
+    // 显式注册图片查看器，避免不同打包环境下组件未自动注入。
+    app.component("ElImageViewer", ElementPlus.ElImageViewer);
+
+    // 挂载 Element Plus。
+    app.use(ElementPlus);
+
+    // 挂载应用。
+    app.mount("#app");
+  </script>
+</body>
+</html>
